@@ -85,20 +85,20 @@ std::vector<uint16_t> SiglentDigitalReader::chunk(size_t chunk_size)
   std::fill(ret.begin(), ret.end(), 0);
 
   // Reads samples in groups of one octect (8 samples)
-  for (size_t base = 0; base < octets_to_be_read; base++)
+  for (int channel = 0; auto& f : fs)
   {
-    for (int channel = 0; auto& f : fs)
+    std::vector<uint8_t> ch(octets_to_be_read);
+
+    f.read((char*)ch.data(), ch.size());
+    // Check if eof?
+
+    for (size_t base = 0; base < octets_to_be_read; base++)
     {
-      uint8_t ch;
-
-      f.read((char*)&ch, 1);
-      // Check if eof?
-
       for (size_t bit = 0; bit < 8; bit++)
-        ret.at(base * 8 + bit) |= ((((uint16_t)ch >> bit) & 0x01) << channel);
-
-      channel++;
+        ret.at(base * 8 + bit) |= ((((uint16_t)ch.at(base) >> bit) & 0x01) << channel);
     }
+
+    channel++;
   }
 
   octets_read += octets_to_be_read;
