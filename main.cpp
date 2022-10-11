@@ -1,11 +1,11 @@
-#include <iostream>
-#include <vector>
-#include <cstring>
-#include <string>
-#include <fstream>
-#include <filesystem>
 #include <algorithm>
 #include <cmath>
+#include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <iostream>
+#include <string>
+#include <vector>
 
 #include <zip.h>
 #include <argparse/argparse.hpp>
@@ -15,14 +15,91 @@
 #include "siglent_data.hpp"
 #include "srzip.hpp"
 
-zip_t* zip_flush(zip_t* zip, std::string filename)
-{
+int zip_source_save(zip_source_t* src, const char* archive) {
+  void* data;
+  size_t size;
+
+  if (zip_source_is_deleted(src)) {
+    /* new archive is empty, thus no data */
+    data = NULL;
+  } else {
+    zip_stat_t zst;
+
+    if (zip_source_stat(src, &zst) < 0) {
+      fprintf(stderr, "can't stat source: %s\n",
+              zip_error_strerror(zip_source_error(src)));
+      return 1;
+    }
+
+    size = zst.size;
+
+    if (zip_source_open(src) < 0) {
+      fprintf(stderr, "can't open source: %s\n",
+              zip_error_strerror(zip_source_error(src)));
+      return 1;
+    }
+    if ((data = malloc(size)) == NULL) {
+      fprintf(stderr, "malloc failed: %s\n", strerror(errno));
+      zip_source_close(src);
+      return 1;
+    }
+    if ((zip_uint64_t)zip_source_read(src, data, size) < size) {
+      fprintf(stderr, "can't read data from source: %s\n",
+              zip_error_strerror(zip_source_error(src)));
+      zip_source_close(src);
+      free(data);
+      return 1;
+    }
+    zip_source_close(src);
+  }
+
+  /* example implementation that writes data to file */
+  FILE* fp;
+
+  if (data == NULL) {
+    if (remove(archive) < 0 && errno != ENOENT) {
+      fprintf(stderr, "can't remove %s: %s\n", archive, strerror(errno));
+      return -1;
+    }
+    return 0;
+  }
+
+  if ((fp = fopen(archive, "wb")) == NULL) {
+    fprintf(stderr, "can't open %s: %s\n", archive, strerror(errno));
+    return -1;
+  }
+  if (fwrite(data, 1, size, fp) < size) {
+    fprintf(stderr, "can't write %s: %s\n", archive, strerror(errno));
+    fclose(fp);
+    return -1;
+  }
+  if (fclose(fp) < 0) {
+    fprintf(stderr, "can't write %s: %s\n", archive, strerror(errno));
+    return -1;
+  }
+
+  return 0;
+}
+
+zip_t* zip_flush(zip_t* zip, zip_source_t* src) {
   zip_close(zip);
-  return zip_open(filename.c_str(), 0, NULL);
+
+  zip_error_t error;
+
+  zip_error_init(&error);
+
+  if ((zip = zip_open_from_source(src, 0, &error)) == NULL) {
+    zip_source_free(src);
+  } else {
+    zip_source_keep(src);
+  }
+
+  zip_error_fini(&error);
+
+  return zip;
 }
 
 int main(int argc, const char** argv) {
-
   // Initialize argument parsing
   argparse::ArgumentParser program("siglent-bin2sr");
 
@@ -78,7 +155,30 @@ int main(int argc, const char** argv) {
     spdlog::trace("Digital size: {}", header.digital_size);
   }
 
-  zip_t* zip = zip_open(out_path.c_str(), ZIP_CREATE | ZIP_TRUNCATE, NULL);
+  zip_t* zip;
+  zip_source_t* src;
+  zip_error_t error;
+
+  zip_error_init(&error);
+  /* create source from buffer */
+  if ((src = zip_source_buffer_create(NULL, 0, 1, &error)) == NULL) {
+    fprintf(stderr, "can't create source: %s\n", zip_error_strerror(&error));
+    zip_error_fini(&error);
+    return 1;
+  }
+
+  /* open zip archive from source */
+  if ((zip = zip_open_from_source(src, ZIP_TRUNCATE, &error)) == NULL) {
+    fprintf(stderr, "can't open zip from source: %s\n",
+            zip_error_strerror(&error));
+    zip_source_free(src);
+    zip_error_fini(&error);
+    return 1;
+  }
+  zip_error_fini(&error);
+
+  /* we'll want to read the data back after zip_close */
+  zip_source_keep(src);
 
   const std::vector<std::string> analog_labels =
     getAnalogLabes(header);
@@ -114,20 +214,23 @@ int main(int argc, const char** argv) {
       std::vector<float> out_chunk;
       out_chunk.reserve(SAMPLES_LIMIT);
 
-      std::transform(chunk.cbegin(), chunk.cend(), std::back_inserter(out_chunk), [&] (uint8_t sample)
-      {
-        // TODO documentation
-        double ret = double(int(sample)-128) * header.analog_scales[channel].get_value() * 10.7 / 256;
-        ret -= header.analog_offsets[channel].get_value();
-        for (size_t i = 1; i < oversample_factor; i++)
-          out_chunk.push_back((float)ret);
-        return (float)ret;
-      });
+      std::transform(chunk.cbegin(), chunk.cend(),
+                     std::back_inserter(out_chunk), [&](uint8_t sample) {
+                       // TODO documentation
+                       double ret = double(int(sample) - 128) *
+                                    header.analog_scales[channel].get_value() *
+                                    10.7 / 256;
+                       ret -= header.analog_offsets[channel].get_value();
+                       for (size_t i = 1; i < oversample_factor; i++)
+                         out_chunk.push_back((float)ret);
+                       return (float)ret;
+                     });
 
       zip_source_t* source = zip_source_buffer(zip, out_chunk.data(), sizeof(out_chunk[0]) * out_chunk.size(), 0);
 
       if (source == NULL)
-        std::cout << "error creating source: " << zip_strerror(zip) << std::endl;
+        std::cout << "error creating source: " << zip_strerror(zip)
+                  << std::endl;
 
       std::stringstream ss;
       ss << "analog-1-" << (header.digital_on ? digital_labels.size() : 0) + active_channel + 1 << "-" << chunk_idx + 1;
@@ -136,7 +239,7 @@ int main(int argc, const char** argv) {
         std::cout << "error adding file: " << zip_strerror(zip) << std::endl;
 
       // Commit
-      zip = zip_flush(zip, out_path.c_str());
+      zip = zip_flush(zip, src);
     }
 
     active_channel++;
@@ -147,7 +250,8 @@ int main(int argc, const char** argv) {
   {
     int digital_channel_no = digital_labels.size();
 
-    SiglentDigitalReader reader(data_offset, digital_channel_no, header.digital_size / 8);
+    SiglentDigitalReader reader(data_offset, digital_channel_no,
+                                header.digital_size / 8);
 
     reader.open(in_path);
 
@@ -163,7 +267,8 @@ int main(int argc, const char** argv) {
       zip_source_t* source = zip_source_buffer(zip, chunk.data(), sizeof(chunk[0]) * chunk.size(), 0);
 
       if (source == NULL)
-        std::cout << "error creating source: " << zip_strerror(zip) << std::endl;
+        std::cout << "error creating source: " << zip_strerror(zip)
+                  << std::endl;
 
       std::stringstream ss;
       ss << "logic-1-" << chunk_idx + 1;
@@ -171,7 +276,7 @@ int main(int argc, const char** argv) {
       if (zip_file_add(zip, ss.str().c_str(), source, ZIP_FL_ENC_UTF_8) < 0)
         std::cout << "error adding file: " << zip_strerror(zip) << std::endl;
 
-      zip = zip_flush(zip, out_path.c_str());
+      zip = zip_flush(zip, src);
     }
   }
 
@@ -186,15 +291,15 @@ int main(int argc, const char** argv) {
     if (zip_file_add(zip, "metadata", source, ZIP_FL_OVERWRITE) < 0)
       std::cout << "error adding file: " << zip_strerror(zip) << "\n";
 
-    zip = zip_flush(zip, out_path.c_str());
+    zip = zip_flush(zip, src);
   }
-
 
   // build up version file
   {
     std::string version = "2";
 
-    zip_source_t* source = zip_source_buffer(zip, version.c_str(), version.length(), 0);
+    zip_source_t* source =
+        zip_source_buffer(zip, version.c_str(), version.length(), 0);
 
     if (source == NULL)
       std::cout << "error creating source: " << zip_strerror(zip) << "\n";
@@ -202,9 +307,12 @@ int main(int argc, const char** argv) {
     if (zip_file_add(zip, "version", source, ZIP_FL_OVERWRITE) < 0)
       std::cout << "error adding file: " << zip_strerror(zip) << "\n";
 
-    zip = zip_flush(zip, out_path.c_str());
+    zip = zip_flush(zip, src);
   }
 
   // Close sr zipfile
   zip_close(zip);
+
+  // Write back to file
+  zip_source_save(src, out_path.c_str());
 }
