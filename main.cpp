@@ -208,6 +208,8 @@ int main(int argc, const char** argv) {
 
       auto chunk = reader.chunk(SAMPLES_LIMIT / oversample_factor);
 
+      spdlog::trace("Reading chunk - transform {}", chunk_idx);
+
       if (chunk.size() == 0)
         break;
 
@@ -226,6 +228,8 @@ int main(int argc, const char** argv) {
                        return (float)ret;
                      });
 
+      spdlog::trace("Reading chunk - zipping {}", chunk_idx);
+
       zip_source_t* source = zip_source_buffer(zip, out_chunk.data(), sizeof(out_chunk[0]) * out_chunk.size(), 0);
 
       if (source == NULL)
@@ -238,6 +242,8 @@ int main(int argc, const char** argv) {
       if (zip_file_add(zip, ss.str().c_str(), source, ZIP_FL_ENC_UTF_8) < 0)
         std::cout << "error adding file: " << zip_strerror(zip) << std::endl;
 
+      spdlog::trace("Reading chunk - flushing {}", chunk_idx);
+      
       // Commit
       zip = zip_flush(zip, src);
     }
