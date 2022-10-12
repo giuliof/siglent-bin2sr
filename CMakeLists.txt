@@ -27,8 +27,7 @@ if (NOT spdlog_POPULATED)
     add_subdirectory(${spdlog_SOURCE_DIR} ${spdlog_BINARY_DIR})
 endif ()
 
-# find_package(spdlog REQUIRED)
-
+# Main executable
 add_executable(siglent-bin2sr
     main.cpp
     siglent_bin.cpp
@@ -37,6 +36,7 @@ add_executable(siglent-bin2sr
 
 target_link_libraries(siglent-bin2sr zip argparse spdlog::spdlog)
 
+# Tests
 add_executable(siglent-bin2sr-test
     test/test_runner.cpp
     siglent_bin.cpp
