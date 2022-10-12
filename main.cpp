@@ -67,7 +67,7 @@ int main(int argc, const char** argv) {
   std::vector<std::string> digital_labels;
 
   size_t data_offset = DATA_OFFSET;
-  for (size_t channel = 0, active_channel = 0; channel < sizeof(header.analog_ch_on) / sizeof(*header.analog_ch_on); channel++)
+  for (size_t channel = 0, active_channel = 0; channel < header.analog_ch_on.size(); channel++)
   {
     if (!header.analog_ch_on[channel])
       continue;

@@ -3,6 +3,7 @@
 
 #include <inttypes.h>
 #include <fstream>
+#include <array>
 
 const int MAX_DIGITAL_PROBES = 16;
 const int MAX_ANALOG_CHANNELS = 4;
@@ -62,19 +63,19 @@ struct header_t {
   };
 
   // on/off status of CH1-CH4, 1 - ON, 0 - OFF
-  bool analog_ch_on[MAX_ANALOG_CHANNELS];
+  std::array<bool, MAX_ANALOG_CHANNELS>  analog_ch_on;
 
   // V/div value of CH1-CH4, such as 2.48 mV/div.
   // Unit of value, such as V from 0x1c-0x1f.
   // Units of value’s magnitude (MICRO) from 0x18-0x1b.
   // 64-bit float point, data of value from 0x10-0x17.
-  unit_value_t analog_scales[MAX_ANALOG_CHANNELS];
+  std::array<unit_value_t, MAX_ANALOG_CHANNELS> analog_scales;
 
-  unit_value_t analog_offsets[MAX_ANALOG_CHANNELS];
+  std::array<unit_value_t, MAX_ANALOG_CHANNELS> analog_offsets;
 
   bool digital_on;
 
-  uint32_t digital_ch_on[MAX_DIGITAL_PROBES];
+  std::array<uint32_t, MAX_DIGITAL_PROBES> digital_ch_on;
 
   unit_value_t time_div;
 
