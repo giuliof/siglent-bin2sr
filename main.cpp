@@ -8,6 +8,7 @@
 #include <cmath>
 
 #include <zip.h>
+#include <argparse/argparse.hpp>
 
 #include "siglent_bin.hpp"
 #include "srzip.hpp"
@@ -22,14 +23,43 @@ zip_t* zip_flush(zip_t* zip, std::string filename)
 
 int main(int argc, const char** argv) {
 
-  // Parse arguments -- TODO
-  std::filesystem::path in_path("mixed-2ch-2probes-small.bin");
+  // Initialize argument parsing
+  argparse::ArgumentParser program("siglent-bin2sr");
+
+  program.add_argument("input").help("Input filename");
+  program.add_argument("-o", "--output").help("Output folder");
+
+  try {
+    program.parse_args(argc, argv);
+  } catch (const std::runtime_error& e) {
+    std::cerr << e.what() << std::endl;
+    std::cerr << program;
+    std::exit(1);
+  }
+
+  // Prepare input and output file
+  // Default output folder is same as input
+  std::filesystem::path in_path = program.get("input");
+  std::filesystem::path out_path = in_path.parent_path();
+
+  if (!std::filesystem::exists(in_path)) {
+    std::cerr << "Input file " << in_path << " does not exists" << std::endl;
+    std::exit(1);
+  }
+
+  if (auto fn = program.present("-o")) {
+    out_path = *fn;
+    if (!std::filesystem::exists(out_path) ||
+        !std::filesystem::is_directory(out_path)) {
+      std::cerr << "Output folder " << out_path << " does not exists or is invalid" << std::endl;
+      std::exit(1);
+    }
+  }
+  out_path /= in_path.stem();
+  out_path += ".srzip";
 
   // Parse header, else error
   header_t header = parse_siglent_header_file(in_path);
-
-  std::filesystem::path out_path = in_path.stem();
-  out_path += ".srzip";
 
   zip_t* zip = zip_open(out_path.c_str(), ZIP_CREATE | ZIP_TRUNCATE, NULL);
 

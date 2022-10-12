@@ -6,13 +6,36 @@ project(siglent-bin2sr)
 
 set (CMAKE_CXX_STANDARD 20)
 
+# Fetch latest argparse libray
+include(FetchContent)
+FetchContent_Declare(
+    argparse
+    GIT_REPOSITORY https://github.com/p-ranav/argparse.git
+)
+FetchContent_MakeAvailable(argparse)
+
+# Fetch latest spdlog library
+FetchContent_Declare(
+        spdlog
+        GIT_REPOSITORY https://github.com/gabime/spdlog.git
+        GIT_TAG        v1.x
+)
+
+FetchContent_GetProperties(spdlog)
+if (NOT spdlog_POPULATED)
+    FetchContent_Populate(spdlog)
+    add_subdirectory(${spdlog_SOURCE_DIR} ${spdlog_BINARY_DIR})
+endif ()
+
+# find_package(spdlog REQUIRED)
+
 add_executable(siglent-bin2sr
     main.cpp
     siglent_bin.cpp
     srzip.cpp
 )
 
-TARGET_LINK_LIBRARIES(siglent-bin2sr zip)
+target_link_libraries(siglent-bin2sr zip argparse spdlog::spdlog)
 
 add_executable(siglent-bin2sr-test
     test/test_runner.cpp
