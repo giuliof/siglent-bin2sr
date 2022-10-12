@@ -9,11 +9,10 @@
 
 #include <zip.h>
 #include <argparse/argparse.hpp>
+#include <spdlog/spdlog.h>
 
 #include "siglent_bin.hpp"
 #include "srzip.hpp"
-
-// #include "spdlog/spdlog.h"
 
 zip_t* zip_flush(zip_t* zip, std::string filename)
 {
@@ -28,12 +27,14 @@ int main(int argc, const char** argv) {
 
   program.add_argument("input").help("Input filename");
   program.add_argument("-o", "--output").help("Output folder");
+  program.add_argument("-v", "--verbose").help("Increase verbosity")
+    .default_value(false)
+    .implicit_value(true);
 
   try {
     program.parse_args(argc, argv);
   } catch (const std::runtime_error& e) {
-    std::cerr << e.what() << std::endl;
-    std::cerr << program;
+    spdlog::error(e.what());
     std::exit(1);
   }
 
@@ -43,7 +44,7 @@ int main(int argc, const char** argv) {
   std::filesystem::path out_path = in_path.parent_path();
 
   if (!std::filesystem::exists(in_path)) {
-    std::cerr << "Input file " << in_path << " does not exists" << std::endl;
+    spdlog::error("Input file {} does not exist", in_path.c_str());
     std::exit(1);
   }
 
@@ -51,15 +52,30 @@ int main(int argc, const char** argv) {
     out_path = *fn;
     if (!std::filesystem::exists(out_path) ||
         !std::filesystem::is_directory(out_path)) {
-      std::cerr << "Output folder " << out_path << " does not exists or is invalid" << std::endl;
+      spdlog::error("Output folder {} does not exist or is invalid", out_path.c_str());
       std::exit(1);
     }
   }
   out_path /= in_path.stem();
   out_path += ".srzip";
 
+  if (program["--verbose"] == true) {
+    spdlog::set_level(spdlog::level::trace);
+  }
+
   // Parse header, else error
   header_t header = parse_siglent_header_file(in_path);
+
+  // Debugging informations
+  spdlog::info("Parsed header");
+  spdlog::trace("Active analog channels: {}", std::count(header.analog_ch_on.begin(), header.analog_ch_on.end(), true) );
+  spdlog::trace("Analog sample rate: {}", header.analog_sample_rate.get_value());
+  spdlog::trace("Analog size: {}", header.analog_size);
+  if (header.digital_on) {
+    spdlog::trace("Active digital channels: {}", std::count(header.digital_ch_on.begin(), header.digital_ch_on.end(), true));
+    spdlog::trace("Digital sample rate: {}", header.digital_sample_rate.get_value());
+    spdlog::trace("Digital size: {}", header.digital_size);
+  }
 
   zip_t* zip = zip_open(out_path.c_str(), ZIP_CREATE | ZIP_TRUNCATE, NULL);
 
@@ -72,6 +88,8 @@ int main(int argc, const char** argv) {
     if (!header.analog_ch_on[channel])
       continue;
 
+    spdlog::info("Reading analog channel {}", channel);
+
     SiglentAnalogReader reader(data_offset, header.analog_size);
 
     reader.open(in_path);
@@ -81,10 +99,10 @@ int main(int argc, const char** argv) {
     if (header.digital_on)
       oversample_factor = header.digital_size / header.analog_size;
     
-    size_t chunk_num = oversample_factor * std::ceil((double)header.analog_size / SAMPLES_LIMIT);
-
     for (size_t chunk_idx = 0; ; chunk_idx++)
     {
+      spdlog::trace("Reading chunk {}", chunk_idx);
+
       auto chunk = reader.chunk(SAMPLES_LIMIT / oversample_factor);
 
       if (chunk.size() == 0)
@@ -144,6 +162,8 @@ int main(int argc, const char** argv) {
 
     for (size_t chunk_idx = 0; ; chunk_idx++)
     {
+      spdlog::trace("Reading chunk {}", chunk_idx);
+
       auto chunk = reader.chunk(SAMPLES_LIMIT);
 
       if (chunk.size() == 0)
@@ -191,8 +211,6 @@ int main(int argc, const char** argv) {
 
       str = metadata.str();
     }
-
-    std::cout << str.c_str();
 
     zip_source_t* source = zip_source_buffer(zip, str.c_str(), str.length(), 0);
 
