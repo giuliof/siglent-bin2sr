@@ -169,7 +169,7 @@ int main(int argc, const char** argv) {
       if (chunk.size() == 0)
         break;
 
-      zip_source_t* source = zip_source_buffer(zip, chunk.data(), chunk.size(), 0);
+      zip_source_t* source = zip_source_buffer(zip, chunk.data(), sizeof(chunk[0]) *chunk.size(), 0);
 
       if (source == NULL)
         std::cout << "error creating source: " << zip_strerror(zip) << std::endl;
