@@ -31,7 +31,7 @@ TEST_CASE("Testing correct generation of srzip metadata from headers", "[test-da
     REQUIRE(digital_labels[0] == "6");
     REQUIRE(analog_labels.empty() == true);
 
-    REQUIRE(generateMetadata(header, analog_labels, digital_labels) == 
+    REQUIRE(generateMetadata(header, analog_labels, digital_labels) ==
       "[device 1]\n"
       "samplerate=0\n"
       "total probes=1\n"
@@ -112,7 +112,7 @@ TEST_CASE("Testing correct generation of srzip metadata from headers", "[test-da
     REQUIRE(digital_labels.size() == 9);
     REQUIRE(digital_labels[0] == "1");
 
-    REQUIRE(generateMetadata(header, analog_labels, digital_labels) == 
+    REQUIRE(generateMetadata(header, analog_labels, digital_labels) ==
       "[device 1]\n"
       "samplerate=0\n"
       "total probes=9\n"

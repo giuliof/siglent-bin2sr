@@ -32,7 +32,7 @@ class SiglentAnalogReader
 class SiglentDigitalReader
 {
   public:
-  
+
   SiglentDigitalReader(size_t skip, size_t channels, size_t len);
 
   void open(const std::string& filename);

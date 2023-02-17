@@ -80,9 +80,9 @@ int main(int argc, const char** argv) {
 
   zip_t* zip = zip_open(out_path.c_str(), ZIP_CREATE | ZIP_TRUNCATE, NULL);
 
-  const std::vector<std::string> analog_labels = 
+  const std::vector<std::string> analog_labels =
     getAnalogLabes(header);
-  const std::vector<std::string> digital_labels = 
+  const std::vector<std::string> digital_labels =
     getDigitalLabes(header);
 
   size_t data_offset = DATA_OFFSET;
@@ -101,7 +101,7 @@ int main(int argc, const char** argv) {
     size_t oversample_factor = 1;
     if (header.digital_on)
       oversample_factor = header.digital_size / header.analog_size;
-    
+
     for (size_t chunk_idx = 0; ; chunk_idx++)
     {
       spdlog::trace("Reading chunk {}", chunk_idx);
@@ -170,7 +170,7 @@ int main(int argc, const char** argv) {
 
       if (zip_file_add(zip, ss.str().c_str(), source, ZIP_FL_ENC_UTF_8) < 0)
         std::cout << "error adding file: " << zip_strerror(zip) << std::endl;
-      
+
       zip = zip_flush(zip, out_path.c_str());
     }
   }
@@ -185,7 +185,7 @@ int main(int argc, const char** argv) {
 
     if (zip_file_add(zip, "metadata", source, ZIP_FL_OVERWRITE) < 0)
       std::cout << "error adding file: " << zip_strerror(zip) << "\n";
-    
+
     zip = zip_flush(zip, out_path.c_str());
   }
 
@@ -201,7 +201,7 @@ int main(int argc, const char** argv) {
 
     if (zip_file_add(zip, "version", source, ZIP_FL_OVERWRITE) < 0)
       std::cout << "error adding file: " << zip_strerror(zip) << "\n";
-    
+
     zip = zip_flush(zip, out_path.c_str());
   }
 

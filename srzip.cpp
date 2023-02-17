@@ -57,10 +57,10 @@ void SiglentDigitalReader::open(const std::string& filename)
   for (int i = 0; auto& f : fs)
   {
     f.open(filename);
-    
+
     if (!f.is_open())
       throw std::runtime_error("Failed opening in digital read");
-    
+
     f.seekg(seek + octets * i);
 
     if (f.eof())
