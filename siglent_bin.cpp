@@ -2,7 +2,7 @@
 
 #include "utils/stream.hpp"
 
-float header_t::unit_value_t::get_value()
+float header_t::unit_value_t::get_value() const
 {
   return value;
 }

@@ -59,7 +59,7 @@ struct header_t {
     magnitude_t magnitude;
     unit_t unit;
 
-    float get_value();
+    float get_value() const;
   };
 
   // on/off status of CH1-CH4, 1 - ON, 0 - OFF

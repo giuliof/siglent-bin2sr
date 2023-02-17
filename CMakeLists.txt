@@ -43,6 +43,8 @@ add_executable(siglent-bin2sr-test
     test/test_header.cpp
     srzip.cpp
     test/test_digital.cpp
+    siglent_data.cpp
+    test/test_data.cpp
 )
 
 add_test(NAME siglent-bin2sr-test
