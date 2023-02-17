@@ -12,6 +12,7 @@
 #include <spdlog/spdlog.h>
 
 #include "siglent_bin.hpp"
+#include "siglent_data.hpp"
 #include "srzip.hpp"
 
 zip_t* zip_flush(zip_t* zip, std::string filename)
@@ -79,8 +80,10 @@ int main(int argc, const char** argv) {
 
   zip_t* zip = zip_open(out_path.c_str(), ZIP_CREATE | ZIP_TRUNCATE, NULL);
 
-  std::vector<std::string> analog_labels;
-  std::vector<std::string> digital_labels;
+  const std::vector<std::string> analog_labels = 
+    getAnalogLabes(header);
+  const std::vector<std::string> digital_labels = 
+    getDigitalLabes(header);
 
   size_t data_offset = DATA_OFFSET;
   for (size_t channel = 0, active_channel = 0; channel < header.analog_ch_on.size(); channel++)
@@ -121,13 +124,13 @@ int main(int argc, const char** argv) {
         return (float)ret;
       });
 
-      zip_source_t* source = zip_source_buffer(zip, out_chunk.data(), sizeof(out_chunk[0]) * chunk.size(), 0);
+      zip_source_t* source = zip_source_buffer(zip, out_chunk.data(), sizeof(out_chunk[0]) * out_chunk.size(), 0);
 
       if (source == NULL)
         std::cout << "error creating source: " << zip_strerror(zip) << std::endl;
 
       std::stringstream ss;
-      ss << "analog-1-" << (header.digital_on ? 16 : 0) + active_channel + 1 << "-" << chunk_idx + 1;
+      ss << "analog-1-" << (header.digital_on ? digital_labels.size() : 0) + active_channel + 1 << "-" << chunk_idx + 1;
 
       if (zip_file_add(zip, ss.str().c_str(), source, ZIP_FL_ENC_UTF_8) < 0)
         std::cout << "error adding file: " << zip_strerror(zip) << std::endl;
@@ -136,25 +139,13 @@ int main(int argc, const char** argv) {
       zip = zip_flush(zip, out_path.c_str());
     }
 
-    analog_labels.push_back(std::to_string(active_channel));
-
     active_channel++;
     data_offset += header.analog_size;
   }
 
   if (header.digital_on)
   {
-    int digital_channel_no = 0;
-
-    // TODO get number of channels
-    for (size_t i = 0; i < 16; i++)
-    {
-      if (header.digital_ch_on[i])
-      {
-        digital_labels.push_back(std::to_string(digital_channel_no));
-        digital_channel_no++;
-      }
-    }
+    int digital_channel_no = digital_labels.size();
 
     SiglentDigitalReader reader(data_offset, digital_channel_no, header.digital_size / 8);
 
@@ -169,7 +160,7 @@ int main(int argc, const char** argv) {
       if (chunk.size() == 0)
         break;
 
-      zip_source_t* source = zip_source_buffer(zip, chunk.data(), sizeof(chunk[0]) *chunk.size(), 0);
+      zip_source_t* source = zip_source_buffer(zip, chunk.data(), sizeof(chunk[0]) * chunk.size(), 0);
 
       if (source == NULL)
         std::cout << "error creating source: " << zip_strerror(zip) << std::endl;
@@ -184,33 +175,8 @@ int main(int argc, const char** argv) {
     }
   }
 
-  // build up meatadata file
   {
-    std::string str;
-
-    {
-      std::stringstream metadata;
-      metadata << "[device 1]" << "\n"
-      << "samplerate=" << (int)header.digital_sample_rate.get_value() << "\n";
-
-      if (digital_labels.size() > 0)
-      {
-        metadata << "total probes=" << digital_labels.size() << "\n";
-        metadata << "unitsize=2" << "\n";
-        metadata << "capturefile=logic-1" << "\n";
-      }
-
-      if (analog_labels.size() > 0)
-        metadata << "total analog=" << analog_labels.size() << "\n";
-
-      for (size_t i = 1; const auto& label : digital_labels)
-        metadata << "probe" << i++ << "=D" << label << "\n";
-
-      for (size_t i = digital_labels.size() + 1; const auto& label : analog_labels)
-        metadata << "analog" << i++ << "=A" << label << "\n";
-
-      str = metadata.str();
-    }
+    std::string str = generateMetadata(header, analog_labels, digital_labels);
 
     zip_source_t* source = zip_source_buffer(zip, str.c_str(), str.length(), 0);
 

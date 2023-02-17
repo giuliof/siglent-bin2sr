@@ -30,6 +30,7 @@ endif ()
 add_executable(siglent-bin2sr
     main.cpp
     siglent_bin.cpp
+    siglent_data.cpp
     srzip.cpp
 )
 
