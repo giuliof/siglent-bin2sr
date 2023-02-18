@@ -80,11 +80,13 @@ int main(int argc, const char** argv) {
 
   zip_t* zip = zip_open(out_path.c_str(), ZIP_CREATE | ZIP_TRUNCATE, NULL);
 
+  // Fetch channels labels from header, counting the active ones
   const std::vector<std::string> analog_labels =
     getAnalogLabes(header);
   const std::vector<std::string> digital_labels =
     getDigitalLabes(header);
 
+  // Start parsing analog channels and create binary files in the ZIP archive
   size_t data_offset = DATA_OFFSET;
   for (size_t channel = 0, active_channel = 0; channel < header.analog_ch_on.size(); channel++)
   {
@@ -97,11 +99,14 @@ int main(int argc, const char** argv) {
 
     reader.open(in_path);
 
-    // If digital enabled, analog may be oversampled
+    // Assumption: on siglent oscilloscope, digital probes have higher sample rate than analog ones.
+    // If digital enabled, analog may require oversampling. Add some replicas to have equal amount of samples
+    // between analog and digital channels.
     size_t oversample_factor = 1;
     if (header.digital_on)
       oversample_factor = header.digital_size / header.analog_size;
 
+    // Avoid the generation of a single large binary file. Split same channel data in multiple smaller files.
     for (size_t chunk_idx = 0; ; chunk_idx++)
     {
       spdlog::trace("Reading chunk {}", chunk_idx);
@@ -129,6 +134,9 @@ int main(int argc, const char** argv) {
       if (source == NULL)
         std::cout << "error creating source: " << zip_strerror(zip) << std::endl;
 
+      // srzip specification: analog probes file must have analog-1-x-y filename, where:
+      // x is a progressive probe number, starting from 1 and counting both digital and analog active probes.
+      // y is a progressive number, starting from 1, counting the chunks in which the raw probe data is splitted.
       std::stringstream ss;
       ss << "analog-1-" << (header.digital_on ? digital_labels.size() : 0) + active_channel + 1 << "-" << chunk_idx + 1;
 
@@ -143,6 +151,7 @@ int main(int argc, const char** argv) {
     data_offset += header.analog_size;
   }
 
+  // Start parsing digital channels and create binary files in the ZIP archive
   if (header.digital_on)
   {
     int digital_channel_no = digital_labels.size();
@@ -165,6 +174,8 @@ int main(int argc, const char** argv) {
       if (source == NULL)
         std::cout << "error creating source: " << zip_strerror(zip) << std::endl;
 
+      // srzip specification: digital probes file must have logic-1-x filename, where:
+      // x is a progressive probe number, starting from 1, counting all active digital probes
       std::stringstream ss;
       ss << "logic-1-" << chunk_idx + 1;
 
@@ -175,6 +186,7 @@ int main(int argc, const char** argv) {
     }
   }
 
+  // srzip specification: zip file must contain a metadata file with probes description, samplerate, ...
   {
     std::string str = generateMetadata(header, analog_labels, digital_labels);
 
@@ -189,8 +201,7 @@ int main(int argc, const char** argv) {
     zip = zip_flush(zip, out_path.c_str());
   }
 
-
-  // build up version file
+  // srzip specification: zip file must contain a version file. Current version is 2.
   {
     std::string version = "2";
 
